@@ -359,7 +359,7 @@ with col3:
     st.markdown(f"<div class='metric-num' style='color:{color}'>{avg_sent:+.2f}</div><div>Avg Sentiment</div>", unsafe_allow_html=True)
 with col4:
     dom_bias = fdf["bias_label"].value_counts().idxmax() if len(fdf) else "—"
-    st.markdown(f"<div class='metric-num' style='font-size:1.4rem'>{dom_bias}</div><div>Dominant Bias</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='metric-num'>{dom_bias}</div><div>Dominant Bias</div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
