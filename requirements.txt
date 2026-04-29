@@ -1,0 +1,8 @@
+streamlit
+plotly
+pandas
+feedparser
+newspaper4k
+groq
+sentence-transformers
+scikit-learn
