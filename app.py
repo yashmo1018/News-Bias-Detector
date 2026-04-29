@@ -23,6 +23,30 @@ import streamlit as st
 from collections import defaultdict
 
 # ──────────────────────────────────────────────
+#  Cloud detection
+# ──────────────────────────────────────────────
+
+def is_cloud_env() -> bool:
+    """
+    Returns True when running on Streamlit Cloud (ephemeral filesystem).
+    Detection order:
+      1. STREAMLIT_CLOUD env var set to any non-empty value  ← set this in
+         Streamlit Cloud > App settings > Secrets / Environment variables
+      2. Presence of the /.streamlit/secrets.toml mount path that Cloud injects
+      3. HOME=/home/appuser  (Streamlit Cloud's default user)
+    Any one match is sufficient.
+    """
+    if os.environ.get("STREAMLIT_CLOUD"):
+        return True
+    if Path("/.streamlit/secrets.toml").exists():
+        return True
+    if os.environ.get("HOME", "") == "/home/appuser":
+        return True
+    return False
+
+CLOUD = is_cloud_env()
+
+# ──────────────────────────────────────────────
 #  Config
 # ──────────────────────────────────────────────
 DATA_FILE        = "clustered.json"
@@ -177,9 +201,10 @@ if "pipeline_status" not in st.session_state:
 if "auto_refresh_triggered" not in st.session_state:
     st.session_state["auto_refresh_triggered"] = False
 
-# Auto-trigger on load if stale (only once per session)
+# Auto-trigger on load if stale (only once per session, never on cloud)
 if (
-    not st.session_state["auto_refresh_triggered"]
+    not CLOUD
+    and not st.session_state["auto_refresh_triggered"]
     and st.session_state["pipeline_status"] == "idle"
     and is_data_stale()
 ):
@@ -250,7 +275,15 @@ else:
 
 status = st.session_state["pipeline_status"]
 
-if status.startswith("running:"):
+if CLOUD:
+    # On Streamlit Cloud the filesystem is ephemeral — pipeline can't run here.
+    # Just show data freshness and explain the workflow.
+    st.sidebar.markdown(
+        f"<div class='refresh-box'>📡 Live dashboard · {age_str}<br>"
+        f"<small>To update: run pipeline locally → commit clustered.json → push</small></div>",
+        unsafe_allow_html=True,
+    )
+elif status.startswith("running:"):
     step = status.split(":")[1]
     step_labels = {"scraper": "1/3 Scraping feeds…", "analyzer": "2/3 Analyzing with LLM…", "clusterer": "3/3 Clustering events…"}
     label = step_labels.get(step, "Running…")
@@ -277,12 +310,13 @@ else:  # idle
     stale_indicator = "⚠️ Stale" if is_data_stale() else "✅ Fresh"
     st.sidebar.markdown(f"<div class='refresh-box'>{stale_indicator} · Last updated: {age_str}<br><small>Auto-refreshes every {REFRESH_INTERVAL}h</small></div>", unsafe_allow_html=True)
 
-refresh_interval = st.sidebar.slider("Auto-refresh threshold (hrs)", 1, 24, REFRESH_INTERVAL)
+if not CLOUD:
+    refresh_interval = st.sidebar.slider("Auto-refresh threshold (hrs)", 1, 24, REFRESH_INTERVAL)
 
-if st.sidebar.button("🔄 Refresh now", disabled=status.startswith("running:")):
-    st.session_state["pipeline_status"] = "running:scraper"
-    trigger_pipeline_background()
-    st.rerun()
+    if st.sidebar.button("🔄 Refresh now", disabled=status.startswith("running:")):
+        st.session_state["pipeline_status"] = "running:scraper"
+        trigger_pipeline_background()
+        st.rerun()
 
 st.sidebar.markdown("---")
 
